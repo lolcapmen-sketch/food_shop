@@ -1,0 +1,47 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap"><link rel="stylesheet" href="css/style.css"><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><title>Оформление заказа</title></head>
+<body><header class="bar"><b>Оформление заказа</b><a href="index.html">В магазин</a></header>
+<main><div id="msg" class="note" hidden></div>
+<section class="panel"><h2>Ваш заказ</h2><div id="cart"></div></section>
+<section class="panel"><h2>Точка доставки</h2><p class="sub">Нажмите на карту или перетащите маркер.</p>
+ <div id="map"></div>
+ <label>Адрес<input id="addr" placeholder="Определится по точке, можно поправить" required></label>
+ <button id="go">Оформить заказ</button></section>
+</main>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="module">
+import { api, requireRole, esc, say } from './js/api.js';
+import { ENDPOINTS, CART_KEY, CUSTOMER_LOGIN_PAGE } from './js/config.js';
+if (!requireRole(null, CUSTOMER_LOGIN_PAGE)) throw 0;
+const msg = document.getElementById('msg'), addr = document.getElementById('addr');
+const cart = JSON.parse(localStorage.getItem(CART_KEY) || '[]');
+document.getElementById('cart').innerHTML = cart.length
+  ? cart.map((i) => `<div class="row"><span>${esc(i.name)} × ${esc(i.quantity)}</span></div>`).join('')
+  : '<div class="empty">Корзина пуста.</div>';
+
+const map = L.map('map').setView([59.9343, 30.3351], 12); // центр по умолчанию — поменяйте на город доставки
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+let marker = null;
+async function pick(latlng) {
+  if (!marker) { marker = L.marker(latlng, { draggable: true }).addTo(map); marker.on('dragend', () => pick(marker.getLatLng())); }
+  else marker.setLatLng(latlng);
+  try {
+    const r = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&accept-language=ru&lat=${latlng.lat}&lon=${latlng.lng}`);
+    const j = await r.json(); if (j.display_name) addr.value = j.display_name;
+  } catch {}
+}
+map.on('click', (e) => pick(e.latlng));
+navigator.geolocation?.getCurrentPosition((p) => { map.setView([p.coords.latitude, p.coords.longitude], 15); });
+
+document.getElementById('go').onclick = async () => {
+  if (!cart.length) return say(msg, 'Добавьте товары в корзину');
+  if (!marker) return say(msg, 'Отметьте точку доставки на карте');
+  const { lat, lng } = marker.getLatLng();
+  try {
+    await api(ENDPOINTS.createOrder, { method: 'POST', body: {
+      items: cart.map((i) => ({ id: i.id, quantity: i.quantity })),
+      deliveryAddress: addr.value, deliveryLat: lat, deliveryLng: lng } });
+    localStorage.removeItem(CART_KEY);
+    say(msg, 'Заказ оформлен', true);
+  } catch (e) { say(msg, e.message); }
+};
+</script></body></html>

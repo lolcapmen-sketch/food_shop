@@ -1,0 +1,32 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap"><link rel="stylesheet" href="css/style.css"><title>Доставка — курьер</title></head>
+<body><header class="bar"><b>Заказы в доставке</b><button class="ghost" id="out">Выйти</button></header>
+<main><div id="msg" class="note" hidden></div>
+<div id="list" class="orders"></div><div id="empty" class="empty" hidden>Сейчас нет заказов в доставке.</div></main>
+<script type="module">
+import { api, requireRole, esc, say, logout } from './js/api.js';
+import { ENDPOINTS, STAFF_LOGIN_PAGE } from './js/config.js';
+if (!requireRole(['courier', 'admin'], STAFF_LOGIN_PAGE)) throw 0;
+const msg = document.getElementById('msg'), list = document.getElementById('list');
+document.getElementById('out').onclick = () => logout(STAFF_LOGIN_PAGE);
+async function load() {
+  try {
+    const orders = await api(ENDPOINTS.courierOrders);
+    document.getElementById('empty').hidden = orders.length > 0;
+    list.innerHTML = orders.map((o) => {
+      const map = Number.isFinite(o.lat) && Number.isFinite(o.lng) ? `https://www.openstreetmap.org/?mlat=${o.lat}&mlon=${o.lng}#map=17/${o.lat}/${o.lng}` : null;
+      return `<article class="order"><header><b>Заказ #${esc(o.id)}</b><span class="badge">${esc(o.total)} ₽</span></header>
+        <div>${esc(o.customerName)}${o.customerPhone ? ` · <a href="tel:${esc(o.customerPhone)}">${esc(o.customerPhone)}</a>` : ''}</div>
+        <div>${esc(o.deliveryAddress)}${map ? ` · <a href="${map}" target="_blank" rel="noopener">на карте</a>` : ''}</div>
+        <p><button data-id="${esc(o.id)}">Доставлен</button></p></article>`;
+    }).join('');
+  } catch (e) { say(msg, e.message); if (e.status === 401 || e.status === 403) location.replace(STAFF_LOGIN_PAGE); }
+}
+list.addEventListener('click', async (e) => {
+  const b = e.target.closest('button[data-id]'); if (!b) return;
+  b.disabled = true;
+  try { await api(ENDPOINTS.courierDone(b.dataset.id), { method: 'PATCH' }); say(msg, `Заказ #${b.dataset.id} доставлен`, true); }
+  catch (err) { say(msg, err.message); }
+  load();
+});
+load(); setInterval(load, 30000);
+</script></body></html>

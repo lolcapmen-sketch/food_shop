@@ -1,0 +1,66 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap"><link rel="stylesheet" href="css/style.css"><title>Food Shop</title></head>
+<body><header class="bar"><b>Food Shop</b><div class="row"><a href="checkout.html">Корзина (<span id="cnt">0</span>)</a><span id="nav" class="row"></span></div></header>
+<main>
+<div id="msg" class="note" hidden></div>
+<section class="panel" id="authBox" hidden><h2>Вход и регистрация</h2>
+ <div class="tabs"><button type="button" class="ghost" id="tLogin">Вход</button><button type="button" class="ghost" id="tReg">Регистрация</button></div>
+ <form id="af">
+  <label id="nameRow" hidden>Имя<input name="name" autocomplete="name"></label>
+  <label>Эл. почта<input name="email" type="email" required autocomplete="username"></label>
+  <label>Пароль<input name="password" type="password" required minlength="8" autocomplete="current-password"></label>
+  <button id="abtn">Войти</button>
+ </form></section>
+<h1>Меню</h1><p class="sub">Выберите блюда и оформите заказ с доставкой.</p>
+<div id="menu" class="grid"></div><div id="empty" class="empty" hidden>Меню пока пусто.</div>
+<p class="sub" style="margin-top:32px"><a href="staff-login.html">Вход для сотрудников</a></p>
+</main>
+<script type="module">
+import { api, auth, esc, say, logout } from './js/api.js';
+import { ENDPOINTS, CART_KEY } from './js/config.js';
+const $ = (id) => document.getElementById(id);
+const msg = $('msg'), af = $('af');
+let registering = false;
+
+const readCart = () => { try { return JSON.parse(localStorage.getItem(CART_KEY)) || []; } catch { return []; } };
+const showCount = () => { $('cnt').textContent = readCart().reduce((n, i) => n + i.quantity, 0); };
+
+function renderAuth() {
+  const a = auth.get(), logged = !!a?.token;
+  $('authBox').hidden = logged;
+  $('nav').innerHTML = logged ? `<a href="account.html">${esc(a.user?.name || 'Личный кабинет')}</a><button class="ghost" id="out">Выйти</button>` : '';
+  if (logged) $('out').onclick = () => logout('index.html');
+}
+function setMode(reg) {
+  registering = reg;
+  $('nameRow').hidden = !reg; af.name.required = reg;
+  af.password.autocomplete = reg ? 'new-password' : 'current-password';
+  $('abtn').textContent = reg ? 'Зарегистрироваться' : 'Войти';
+}
+$('tLogin').onclick = () => setMode(false);
+$('tReg').onclick = () => setMode(true);
+af.addEventListener('submit', async (e) => {
+  e.preventDefault(); $('abtn').disabled = true; say(msg, '');
+  try {
+    const d = await api(registering ? ENDPOINTS.register : ENDPOINTS.login, { method: 'POST', body: Object.fromEntries(new FormData(af)) });
+    auth.set({ token: d.token, user: d.user }); af.reset(); renderAuth();
+  } catch (err) { say(msg, err.message); }
+  $('abtn').disabled = false;
+});
+
+$('menu').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-id]'); if (!b) return;
+  const cart = readCart(), id = Number(b.dataset.id), item = cart.find((i) => i.id === id);
+  if (item) item.quantity = Math.min(99, item.quantity + 1);
+  else cart.push({ id, name: b.dataset.name, price: Number(b.dataset.price), quantity: 1 });
+  localStorage.setItem(CART_KEY, JSON.stringify(cart)); showCount();
+});
+
+try {
+  const list = await api(ENDPOINTS.products);
+  $('empty').hidden = list.length > 0;
+  $('menu').innerHTML = list.map((p) => `<div class="panel"><b>${esc(p.name)}</b><p>${esc(p.description)}</p>
+    <div class="row"><span class="price">${esc(p.price)} ₽</span>
+    <button data-id="${esc(p.id)}" data-name="${esc(p.name)}" data-price="${esc(p.price)}">В корзину</button></div></div>`).join('');
+} catch (e) { say(msg, e.message); }
+renderAuth(); showCount();
+</script></body></html>

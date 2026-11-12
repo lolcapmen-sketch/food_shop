@@ -1,0 +1,29 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap"><link rel="stylesheet" href="css/style.css"><title>Заказы — менеджер</title></head>
+<body><header class="bar"><b>Заказы</b><button class="ghost" id="out">Выйти</button></header>
+<main><div id="msg" class="note" hidden></div>
+<div class="panel table-wrap"><table><thead><tr><th>№</th><th>Клиент</th><th>Адрес доставки</th><th>Сумма</th><th>Статус</th></tr></thead><tbody id="rows"></tbody></table><div id="empty" class="empty" hidden>Заказов пока нет.</div></div>
+</main>
+<script type="module">
+import { api, requireRole, esc, say, logout } from './js/api.js';
+import { ENDPOINTS, ORDER_STATUSES, STAFF_LOGIN_PAGE } from './js/config.js';
+if (!requireRole(['manager', 'admin'], STAFF_LOGIN_PAGE)) throw 0;
+const msg = document.getElementById('msg'), rows = document.getElementById('rows');
+document.getElementById('out').onclick = () => logout(STAFF_LOGIN_PAGE);
+async function load() {
+  try {
+    const d = await api(ENDPOINTS.managerOrders);
+    const list = Array.isArray(d) ? d : d.orders ?? [];
+    document.getElementById('empty').hidden = list.length > 0;
+    rows.innerHTML = list.map((o) => `<tr>
+      <td>#${esc(o.id)}</td><td>${esc(o.customerName ?? o.user?.name ?? '—')}</td>
+      <td>${esc(o.deliveryAddress ?? '—')}</td><td>${esc(o.total ?? o.totalPrice ?? '')}</td>
+      <td><select data-id="${esc(o.id)}" aria-label="Статус заказа ${esc(o.id)}">${Object.entries(ORDER_STATUSES).map(([k, v]) => `<option value="${k}" ${k === o.status ? 'selected' : ''}>${v}</option>`).join('')}</select></td></tr>`).join('');
+  } catch (e) { say(msg, e.message); if (e.status === 401 || e.status === 403) location.replace(STAFF_LOGIN_PAGE); }
+}
+rows.addEventListener('change', async (e) => {
+  const s = e.target.closest('select'); if (!s) return;
+  try { await api(ENDPOINTS.managerStatus(s.dataset.id), { method: 'PATCH', body: { status: s.value } }); say(msg, `Заказ #${s.dataset.id}: статус обновлён`, true); }
+  catch (err) { say(msg, err.message); load(); }
+});
+load();
+</script></body></html>

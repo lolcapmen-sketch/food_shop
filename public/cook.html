@@ -1,0 +1,28 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap"><link rel="stylesheet" href="css/style.css"><title>Активные заказы — повар</title></head>
+<body><header class="bar"><b>Активные заказы</b><button class="ghost" id="out">Выйти</button></header>
+<main><div id="msg" class="note" hidden></div>
+<div id="list" class="orders"></div><div id="empty" class="empty" hidden>Сейчас нет заказов в работе.</div></main>
+<script type="module">
+import { api, requireRole, esc, say, logout } from './js/api.js';
+import { ENDPOINTS, ORDER_STATUSES, STAFF_LOGIN_PAGE } from './js/config.js';
+if (!requireRole(['cook', 'admin'], STAFF_LOGIN_PAGE)) throw 0;
+const msg = document.getElementById('msg'), list = document.getElementById('list');
+document.getElementById('out').onclick = () => logout(STAFF_LOGIN_PAGE);
+const steps = (r) => Array.isArray(r?.steps) ? r.steps : String(r?.steps ?? r?.instructions ?? '').split('\n').filter(Boolean);
+async function load() {
+  const open = new Set([...list.querySelectorAll('details[open]')].map((d) => d.dataset.k));
+  try {
+    const d = await api(ENDPOINTS.cookOrders);
+    const orders = Array.isArray(d) ? d : d.orders ?? [];
+    document.getElementById('empty').hidden = orders.length > 0;
+    list.innerHTML = orders.map((o) => `<article class="order"><header><b>Заказ #${esc(o.id)}</b><span class="badge">${esc(ORDER_STATUSES[o.status] ?? o.status ?? '')}</span></header>
+      ${(o.items ?? []).map((it, i) => { const r = it.recipe ?? it.Recipe ?? it.product?.recipe, k = o.id + '-' + i; return `
+        <div><b>${esc(it.name ?? it.title ?? r?.title)}</b> × ${esc(it.quantity ?? 1)}
+        <details data-k="${k}" ${open.has(k) ? 'open' : ''}><summary>Рецепт приготовления</summary>
+          ${r?.ingredients ? `<p>${esc([].concat(r.ingredients).map((x) => x.name ?? x).join(', '))}</p>` : ''}
+          <ol>${steps(r).map((s) => `<li>${esc(s)}</li>`).join('')}</ol></details></div>`; }).join('')}
+      </article>`).join('');
+  } catch (e) { say(msg, e.message); if (e.status === 401 || e.status === 403) location.replace(STAFF_LOGIN_PAGE); }
+}
+load(); setInterval(load, 30000);
+</script></body></html>

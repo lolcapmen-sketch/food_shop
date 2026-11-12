@@ -1,0 +1,53 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap"><link rel="stylesheet" href="css/style.css"><title>Личный кабинет</title></head>
+<body><header class="bar"><b>Личный кабинет</b><div class="row"><a href="index.html">В магазин</a><button class="ghost" id="out">Выйти</button></div></header>
+<main>
+<div id="msg" class="note" hidden></div>
+<section class="panel"><h2>Профиль</h2>
+ <p>Баллы лояльности: <span class="badge" id="points">0</span></p>
+ <form id="profile">
+  <label>Имя<input name="name" required></label>
+  <label>Эл. почта<input name="email" type="email" required></label>
+  <label>Телефон<input name="phone" type="tel"></label>
+  <label>Адрес по умолчанию<input name="address"></label>
+  <div class="row"><button>Сохранить изменения</button><button type="button" class="danger" id="del">Удалить профиль</button></div>
+ </form></section>
+<section class="panel"><h2>Предложить рецепт</h2>
+ <form id="recipe">
+  <label>Название<input name="title" required></label>
+  <label>Описание<textarea name="description"></textarea></label>
+  <label>Ингредиенты (по одному в строке)<textarea name="ingredients" required></textarea></label>
+  <label>Шаги приготовления (по одному в строке)<textarea name="steps" required></textarea></label>
+  <button>Отправить рецепт</button>
+ </form></section>
+</main>
+<script type="module">
+import { api, auth, requireRole, say, logout } from './js/api.js';
+import { ENDPOINTS, CUSTOMER_LOGIN_PAGE } from './js/config.js';
+if (!requireRole(null, CUSTOMER_LOGIN_PAGE)) throw 0;
+const msg = document.getElementById('msg'), pf = document.getElementById('profile'), rf = document.getElementById('recipe');
+const lines = (s) => s.split('\n').map((x) => x.trim()).filter(Boolean);
+document.getElementById('out').onclick = () => logout(CUSTOMER_LOGIN_PAGE);
+try {
+  const u = await api(ENDPOINTS.me);
+  for (const k of ['name', 'email', 'phone', 'address']) if (pf[k]) pf[k].value = u[k] ?? '';
+  document.getElementById('points').textContent = u.loyaltyPoints ?? u.points ?? 0;
+} catch (e) { say(msg, e.message); if (e.status === 401) location.replace(CUSTOMER_LOGIN_PAGE); }
+pf.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try { await api(ENDPOINTS.me, { method: 'PUT', body: Object.fromEntries(new FormData(pf)) }); say(msg, 'Профиль сохранён', true); }
+  catch (err) { say(msg, err.message); }
+});
+document.getElementById('del').onclick = async () => {
+  if (!confirm('Удалить профиль без возможности восстановления?')) return;
+  try { await api(ENDPOINTS.me, { method: 'DELETE' }); logout(CUSTOMER_LOGIN_PAGE); }
+  catch (err) { say(msg, err.message); }
+};
+rf.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const d = Object.fromEntries(new FormData(rf));
+  try {
+    await api(ENDPOINTS.suggestRecipe, { method: 'POST', body: { ...d, ingredients: lines(d.ingredients), steps: lines(d.steps) } });
+    rf.reset(); say(msg, 'Рецепт отправлен на проверку', true);
+  } catch (err) { say(msg, err.message); }
+});
+</script></body></html>

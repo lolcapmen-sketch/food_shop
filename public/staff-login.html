@@ -1,0 +1,26 @@
+<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap"><link rel="stylesheet" href="css/style.css"><title>Вход для сотрудников</title></head>
+<body><main class="narrow">
+<h1>Вход для сотрудников</h1><p class="sub">После входа откроется ваш рабочий раздел.</p>
+<form id="f" class="panel">
+  <label>Эл. почта<input name="email" type="email" required autocomplete="username"></label>
+  <label>Пароль<input name="password" type="password" required autocomplete="current-password"></label>
+  <button id="btn">Войти</button>
+  <div id="msg" class="note err" hidden></div>
+</form></main>
+<script type="module">
+import { api, auth, say } from './js/api.js';
+import { ENDPOINTS, ROLE_REDIRECT } from './js/config.js';
+const f = document.getElementById('f'), msg = document.getElementById('msg'), btn = document.getElementById('btn');
+const existing = auth.get();
+if (existing?.token && ROLE_REDIRECT[existing.user?.role]) location.replace(ROLE_REDIRECT[existing.user.role]);
+f.addEventListener('submit', async (e) => {
+  e.preventDefault(); btn.disabled = true; say(msg, '');
+  try {
+    const d = await api(ENDPOINTS.staffLogin, { method: 'POST', body: Object.fromEntries(new FormData(f)) });
+    const target = ROLE_REDIRECT[d.user?.role];
+    if (!target) throw new Error('Для этой роли нет рабочего раздела');
+    auth.set({ token: d.token, user: d.user });
+    location.replace(target);
+  } catch (err) { say(msg, err.message); btn.disabled = false; }
+});
+</script></body></html>
